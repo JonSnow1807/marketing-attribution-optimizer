@@ -1,6 +1,7 @@
 """
 Shapley Value Attribution Model
 Uses game theory to fairly distribute conversion credit across touchpoints
+Production version with Monte Carlo approximation for numerical stability
 """
 
 import numpy as np
@@ -12,13 +13,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score, precision_recall_curve
+import random
 import warnings
 warnings.filterwarnings('ignore')
 
 class ShapleyAttributionModel:
     """
     Shapley Value Attribution using sklearn models
-    Implements both data-driven and channel-based Shapley values
+    Implements Monte Carlo approximation for production scalability
     """
     
     def __init__(self, model_type: str = 'random_forest'):
@@ -110,56 +112,64 @@ class ShapleyAttributionModel:
         
         return pd.DataFrame(journey_features)
     
-    def calculate_channel_shapley(self, df: pd.DataFrame) -> Dict[str, float]:
+    def calculate_channel_shapley(self, df: pd.DataFrame, n_samples: int = 1000) -> Dict[str, float]:
         """
-        Calculate Shapley values for each channel
+        Calculate Shapley values using Monte Carlo approximation
+        Production-ready method that avoids numerical overflow
         
         Args:
             df: Touchpoint data
+            n_samples: Number of Monte Carlo samples (default 1000)
             
         Returns:
             Dictionary of channel Shapley values
         """
-        # Get all unique channels
         channels = df['channel'].unique()
         n_channels = len(channels)
-        
-        # Initialize Shapley values
         shapley_values = {channel: 0.0 for channel in channels}
         
-        # Get conversions by channel combination
+        # Get conversion rates by channel combination
         conversions_by_coalition = self._get_conversion_rates_by_coalition(df)
         
-        # Calculate Shapley value for each channel
+        # Monte Carlo approximation for each channel
         for channel in channels:
-            shapley_value = 0.0
+            marginal_contributions = []
             
-            # Iterate through all possible coalitions
-            for r in range(n_channels):
-                for coalition in combinations([ch for ch in channels if ch != channel], r):
-                    coalition_with = tuple(sorted(coalition + (channel,)))
-                    coalition_without = tuple(sorted(coalition))
-                    
-                    # Get conversion rates
-                    v_with = conversions_by_coalition.get(coalition_with, 0)
-                    v_without = conversions_by_coalition.get(coalition_without, 0)
-                    
-                    # Calculate marginal contribution
-                    marginal_contribution = v_with - v_without
-                    
-                    # Weight by coalition size
-                    weight = (np.math.factorial(len(coalition)) * 
-                             np.math.factorial(n_channels - len(coalition) - 1) / 
-                             np.math.factorial(n_channels))
-                    
-                    shapley_value += weight * marginal_contribution
+            for _ in range(n_samples):
+                # Create random permutation of all channels
+                permutation = list(channels)
+                random.shuffle(permutation)
+                
+                # Find position of current channel
+                channel_position = permutation.index(channel)
+                
+                # Coalition before adding the channel
+                coalition_before = permutation[:channel_position]
+                coalition_after = permutation[:channel_position + 1]
+                
+                # Get conversion rates
+                v_before = conversions_by_coalition.get(tuple(sorted(coalition_before)), 0) if coalition_before else 0
+                v_after = conversions_by_coalition.get(tuple(sorted(coalition_after)), 0)
+                
+                # Marginal contribution
+                marginal_contribution = v_after - v_before
+                marginal_contributions.append(marginal_contribution)
             
-            shapley_values[channel] = shapley_value
+            # Average marginal contribution is the Shapley value
+            shapley_values[channel] = np.mean(marginal_contributions)
         
-        # Normalize to sum to 1
+        # Normalize to sum to 1 (ensuring non-negative values)
+        min_value = min(shapley_values.values())
+        if min_value < 0:
+            # Shift all values to be non-negative
+            shapley_values = {k: v - min_value for k, v in shapley_values.items()}
+        
         total = sum(shapley_values.values())
         if total > 0:
             shapley_values = {k: v/total for k, v in shapley_values.items()}
+        else:
+            # Equal attribution if all zeros
+            shapley_values = {k: 1.0/n_channels for k in channels}
         
         self.channel_shapley_values = shapley_values
         return shapley_values
@@ -182,7 +192,7 @@ class ShapleyAttributionModel:
             converted = journey['converted'].max()
             
             # Add to all subsets of channels in journey
-            for r in range(1, len(channels_in_journey) + 1):
+            for r in range(len(channels_in_journey) + 1):
                 for coalition in combinations(channels_in_journey, r):
                     coalition = tuple(sorted(coalition))
                     if coalition not in conversion_rates:
@@ -250,8 +260,8 @@ class ShapleyAttributionModel:
         if hasattr(self.model, 'feature_importances_'):
             self.feature_importance = dict(zip(feature_cols, self.model.feature_importances_))
         
-        # Calculate channel Shapley values
-        print("Calculating channel Shapley values...")
+        # Calculate channel Shapley values using Monte Carlo
+        print("Calculating channel Shapley values (Monte Carlo)...")
         self.calculate_channel_shapley(df)
         
     def attribute_conversions(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -279,8 +289,6 @@ class ShapleyAttributionModel:
                 for channel in journey_channels:
                     # Base attribution from channel Shapley value
                     base_attribution = self.channel_shapley_values.get(channel, 0)
-                    
-                    # Adjust for position in journey (optional enhancement)
                     attributions.append(base_attribution)
                 
                 # Normalize to sum to 1 for the journey
