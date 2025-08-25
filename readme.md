@@ -1,160 +1,62 @@
-# Marketing Attribution & ROI Optimizer
+# Marketing Attribution Optimizer
 
-A production-ready marketing attribution system implementing multi-touch attribution models, Media Mix Modeling (MMM), and causal analysis using Scala/Spark, Python (scikit-learn), and R for statistical validation.
+Real-world marketing attribution system using Google Analytics data from BigQuery public datasets.
+
+## 🎯 Project Overview
+
+Built to demonstrate production ML engineering skills for marketing attribution after receiving feedback about needing Scala/Spark and attribution modeling experience.
+
+## 📊 Real Results (Not Simulated)
+
+- **Data Source**: Google Analytics Sample (`bigquery-public-data.google_analytics_sample`)
+- **Records Processed**: 9,617 real e-commerce touchpoints
+- **Unique Visitors**: 8,076
+- **Actual Conversions**: 138 transactions ($14,950 revenue)
+- **Conversion Rate**: 1.43% (realistic e-commerce rate)
+- **Processing Platform**: Databricks Spark 4.0.0
+
+## ✅ Technologies Demonstrated
+
+### Spark/Scala
+- Compiled Scala attribution pipeline with sbt
+- Executed PySpark on Databricks cloud platform
+- Processed real GA data on distributed Spark cluster
+- [View Databricks execution proof](docs/databricks_screenshots/)
+
+### Python (scikit-learn)
+- Shapley value attribution with Monte Carlo approximation
+- Random Forest: 0.98 AUC (likely overfit on small dataset)
+- Markov chain attribution modeling
+
+### R Statistical Validation
+- ANOVA hypothesis testing (p<2e-16)
+- Statistical significance validation
 
 ## 🚀 Key Features
 
-- **Multi-Touch Attribution**: Shapley values, Markov chains, and custom attribution models
-- **Large-Scale Processing**: Scala/Spark for processing millions of customer journeys
-- **Machine Learning Models**: Conversion prediction, CLV estimation using scikit-learn
-- **Media Mix Modeling**: Budget optimization with adstock and saturation curves
-- **Statistical Validation**: R-based hypothesis testing and confidence intervals
-- **A/B Testing Framework**: Causal impact measurement with significance testing
-- **Real-time Dashboard**: Streamlit-based visualization and insights
-- **Production Ready**: Docker containerization, comprehensive testing, API endpoints
+- **Multi-Touch Attribution**: Shapley values, Markov chains, position-based
+- **Real Data Pipeline**: BigQuery → Spark → Attribution Models
+- **Cloud Deployment**: Executed on Databricks Community Edition
+- **ML Models**: RandomForestClassifier for conversion prediction
 
-## 📊 Performance Metrics
+## 📈 Attribution Performance
 
-- Processes 1M+ customer journeys in under 5 minutes
-- 85%+ accuracy in conversion prediction
-- 30% improvement in attribution accuracy vs last-touch
-- Sub-second attribution calculation for real-time use
-- Statistical significance p<0.05 in A/B test results
+| Channel | Attributed Revenue | Touchpoints | Conv Rate |
+|---------|-------------------|-------------|-----------|
+| Direct | $7,848 | 2,784 | 2.59% |
+| Google Organic | $2,265 | 5,009 | 1.00% |
+| Google CPC | $444 | 249 | 2.81% |
 
-## 🛠 Tech Stack
+## 🛠️ Setup & Execution
 
-- **Data Processing**: Apache Spark 3.4+ (Scala 2.12)
-- **Machine Learning**: Python 3.9+, scikit-learn, NumPy, Pandas
-- **Statistical Analysis**: R 4.2+
-- **Dashboard**: Streamlit
-- **Infrastructure**: Docker, Apache Airflow (optional)
+See documentation for:
+- [Databricks execution screenshots](docs/databricks_screenshots/)
+- [Attribution model details](src/python/attribution/)
+- [Statistical validation](src/r/)
 
-## 📁 Project Structure
+## 📝 Note
 
-```
-marketing-attribution-optimizer/
-├── src/
-│   ├── python/          # ML models and attribution logic
-│   ├── scala/           # Spark data processing pipeline
-│   └── r/               # Statistical validation
-├── dashboard/           # Streamlit visualization app
-├── tests/              # Comprehensive test suite
-└── docs/               # Architecture and API documentation
-```
+This project demonstrates the ability to quickly learn and implement required technologies. While not claiming years of production experience, it shows competence in the exact skills requested: Scala/Spark processing, attribution modeling, and statistical validation using R.
 
-## 🚦 Quick Start
-
-### Prerequisites
-
-- Python 3.9+
-- Java 11+
-- Scala 2.12+
-- Apache Spark 3.4+
-- R 4.2+
-
-### Installation
-
-```bash
-# Clone repository
-git clone git@github.com:yourusername/marketing-attribution-optimizer.git
-cd marketing-attribution-optimizer
-
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Install R dependencies
-Rscript src/r/install_packages.R
-
-# Build Scala/Spark components
-cd src/scala && sbt compile && cd ../..
-```
-
-### Generate Sample Data
-
-```bash
-python data/sample_generator.py --num-customers 100000 --num-touchpoints 500000
-```
-
-### Run Attribution Pipeline
-
-```bash
-# Process data with Spark
-spark-submit --class AttributionPipeline src/scala/target/scala-2.12/attribution-pipeline.jar
-
-# Run attribution models
-python src/python/attribution/multi_touch.py
-
-# Statistical validation
-Rscript src/r/statistical_validation.R
-```
-
-### Launch Dashboard
-
-```bash
-streamlit run dashboard/app.py
-```
-
-## 📈 Attribution Models
-
-### Shapley Value Attribution
-Distributes conversion credit using game theory principles, ensuring fair allocation across all touchpoints.
-
-### Markov Chain Attribution
-Models customer journey as state transitions, capturing sequential patterns and channel interactions.
-
-### Media Mix Modeling (MMM)
-Optimizes marketing budget allocation using:
-- Adstock transformation for lag effects
-- Saturation curves for diminishing returns
-- Cross-channel interactions
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-pytest tests/ --cov=src/python --cov-report=html
-
-# Run specific test suite
-pytest tests/test_attribution.py -v
-```
-
-## 🐳 Docker Deployment
-
-```bash
-# Build and run with Docker Compose
-docker-compose up --build
-
-# Access services
-# - Dashboard: http://localhost:8501
-# - API: http://localhost:8000
-```
-
-## 📊 Sample Results
-
-- **Attribution Accuracy**: 87% (vs 65% last-touch)
-- **Processing Speed**: 1M journeys in 4.2 minutes
-- **ROI Improvement**: 32% budget efficiency gain
-- **Model Performance**: AUROC 0.89 for conversion prediction
-
-## 🔍 API Documentation
-
-See [API Documentation](docs/api_documentation.md) for endpoint details.
-
-## 🏗 Architecture
-
-See [Architecture Documentation](docs/architecture.md) for system design details.
-
-## 📝 License
-
-MIT License
-
-## 👤 Author
-
-Chinmay Shrivastava - Machine Learning Engineer
-- Email: your.email@example.com
-- LinkedIn: [Your LinkedIn]
-- GitHub: [@yourusername]
-
-## 🙏 Acknowledgments
-
-Built as a demonstration of production ML engineering capabilities for enterprise-scale marketing analytics.
+---
+Built by Chinmay Shrivastava | [GitHub](https://github.com/JonSnow1807)
