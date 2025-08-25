@@ -37,7 +37,7 @@ read_attribution_data <- function(file_path = "data/processed/touchpoints_all_at
 # Function to perform statistical tests on attribution methods
 test_attribution_methods <- function(df) {
   cat("\n1. COMPARING ATTRIBUTION METHODS\n")
-  cat("="*40, "\n")
+  cat(paste(rep("=", 40), collapse=""), "\n")
   
   # Prepare data for comparison
   attribution_cols <- c("shapley_attribution", "markov_attribution", 
@@ -71,7 +71,7 @@ test_attribution_methods <- function(df) {
 # Function to calculate confidence intervals
 calculate_confidence_intervals <- function(df) {
   cat("\n2. CONFIDENCE INTERVALS FOR CHANNEL PERFORMANCE\n")
-  cat("="*40, "\n")
+  cat(paste(rep("=", 40), collapse=""), "\n")
   
   # Bootstrap confidence intervals for channel attribution
   channels <- unique(df$channel)
@@ -112,7 +112,7 @@ calculate_confidence_intervals <- function(df) {
 # Function to test conversion prediction model
 test_conversion_model <- function(df) {
   cat("\n3. CONVERSION PREDICTION MODEL VALIDATION\n")
-  cat("="*40, "\n")
+  cat(paste(rep("=", 40), collapse=""), "\n")
   
   # Prepare features for logistic regression
   model_data <- df %>%
@@ -171,7 +171,7 @@ test_conversion_model <- function(df) {
 # Function to test channel interaction effects
 test_channel_interactions <- function(df) {
   cat("\n4. CHANNEL INTERACTION EFFECTS\n")
-  cat("="*40, "\n")
+  cat(paste(rep("=", 40), collapse=""), "\n")
   
   # Create channel combination features
   journey_data <- df %>%
@@ -220,7 +220,7 @@ test_channel_interactions <- function(df) {
 # Function to calculate statistical power
 calculate_statistical_power <- function(df) {
   cat("\n5. STATISTICAL POWER ANALYSIS\n")
-  cat("="*40, "\n")
+  cat(paste(rep("=", 40), collapse=""), "\n")
   
   # Calculate effect sizes for different attribution methods
   converted_df <- df %>% filter(converted == 1)
@@ -283,7 +283,7 @@ main <- function() {
   
   # Save results
   cat("\n\nSAVING RESULTS\n")
-  cat("="*40, "\n")
+  cat(paste(rep("=", 40), collapse=""), "\n")
   
   # Create output directory if it doesn't exist
   output_dir <- file.path(PROJECT_ROOT, "data", "processed", "r_validation")
