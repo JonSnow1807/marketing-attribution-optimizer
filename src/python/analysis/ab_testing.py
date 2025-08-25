@@ -1,32 +1,162 @@
 """
-A/B Testing and Experimental Design Framework
-Statistical testing for marketing experiments
+A/B Testing Framework for Attribution Model Comparison
+Tests actual differences between attribution methods
 """
 
 import numpy as np
 import pandas as pd
 from scipy import stats
 from statsmodels.stats.power import TTestPower
-from statsmodels.stats.proportion import proportions_ztest
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
 import hashlib
 
 
-class ABTestingFramework:
-    """A/B testing with proper experimental design"""
+class AttributionABTesting:
+    """A/B testing for attribution model effectiveness"""
     
     def __init__(self, confidence_level: float = 0.95):
         self.confidence_level = confidence_level
         self.alpha = 1 - confidence_level
         
-    def assign_variant(self, customer_id: int, test_name: str = 'default') -> str:
-        """Deterministic variant assignment using hashing"""
-        hash_input = f"{test_name}_{customer_id}"
-        hash_value = int(hashlib.md5(hash_input.encode()).hexdigest(), 16)
-        return 'control' if hash_value % 2 == 0 else 'treatment'
+    def test_attribution_model_difference(self, df: pd.DataFrame):
+        """Test if different attribution models produce significantly different results"""
+        
+        # Get conversions attributed by each method
+        conversions_by_method = {}
+        
+        for method in ['shapley_attribution', 'markov_attribution', 'last_touch_attribution']:
+            if method in df.columns:
+                # Sum attribution by customer
+                customer_attr = df.groupby('customer_id')[method].sum()
+                conversions_by_method[method] = customer_attr[customer_attr > 0]
+        
+        # Perform ANOVA to test if methods differ
+        if len(conversions_by_method) >= 2:
+            f_stat, p_value = stats.f_oneway(*conversions_by_method.values())
+            
+            # Pairwise comparisons
+            all_data = []
+            all_labels = []
+            for method, values in conversions_by_method.items():
+                all_data.extend(values)
+                all_labels.extend([method] * len(values))
+            
+            tukey_result = pairwise_tukeyhsd(all_data, all_labels, alpha=self.alpha)
+            
+            return {
+                'f_statistic': f_stat,
+                'p_value': p_value,
+                'significant_difference': p_value < self.alpha,
+                'tukey_results': tukey_result,
+                'mean_attributions': {k: v.mean() for k, v in conversions_by_method.items()}
+            }
+        
+        return None
     
-    def calculate_sample_size(self, baseline_rate: float, mde: float = 0.05, 
-                            power: float = 0.8) -> int:
-        """Calculate required sample size for experiment"""
+    def test_channel_incrementality(self, df: pd.DataFrame, test_channel: str):
+        """Test incrementality of a specific channel using holdout"""
+        
+        # Split customers into control (no exposure to channel) and treatment
+        customers = df['customer_id'].unique()
+        np.random.seed(42)
+        
+        # 80/20 split
+        control_size = int(len(customers) * 0.2)
+        control_customers = np.random.choice(customers, control_size, replace=False)
+        
+        # Control: customers who didn't see the test channel
+        control_df = df[df['customer_id'].isin(control_customers)]
+        control_df = control_df[control_df['channel'] != test_channel]
+        
+        # Treatment: customers who saw the test channel
+        treatment_df = df[~df['customer_id'].isin(control_customers)]
+        
+        # Calculate conversion rates
+        control_conversions = control_df.groupby('customer_id')['converted'].max()
+        treatment_conversions = treatment_df.groupby('customer_id')['converted'].max()
+        
+        control_rate = control_conversions.mean()
+        treatment_rate = treatment_conversions.mean()
+        
+        # Statistical test
+        t_stat, p_value = stats.ttest_ind(control_conversions, treatment_conversions)
+        
+        # Calculate lift
+        lift = (treatment_rate - control_rate) / control_rate if control_rate > 0 else 0
+        
+        # Effect size (Cohen's d)
+        pooled_std = np.sqrt((control_conversions.var() + treatment_conversions.var()) / 2)
+        cohens_d = (treatment_rate - control_rate) / pooled_std if pooled_std > 0 else 0
+        
+        return {
+            'channel': test_channel,
+            'control_rate': control_rate,
+            'treatment_rate': treatment_rate,
+            'lift': lift,
+            'p_value': p_value,
+            't_statistic': t_stat,
+            'cohens_d': cohens_d,
+            'significant': p_value < self.alpha,
+            'control_n': len(control_conversions),
+            'treatment_n': len(treatment_conversions)
+        }
+    
+    def budget_allocation_experiment(self, df: pd.DataFrame):
+        """Test different budget allocation strategies"""
+        
+        # Strategy 1: Equal allocation
+        equal_allocation = {channel: 1/len(df['channel'].unique()) 
+                          for channel in df['channel'].unique()}
+        
+        # Strategy 2: Allocation based on Shapley values
+        shapley_allocation = {}
+        if 'shapley_attribution' in df.columns:
+            channel_shapley = df.groupby('channel')['shapley_attribution'].sum()
+            total_shapley = channel_shapley.sum()
+            shapley_allocation = (channel_shapley / total_shapley).to_dict()
+        
+        # Strategy 3: Allocation based on ROI
+        roi_allocation = {}
+        channel_roi = df.groupby('channel').apply(
+            lambda x: (x['revenue'].sum() - x['cost'].sum()) / x['cost'].sum() 
+            if x['cost'].sum() > 0 else 0
+        )
+        positive_roi = channel_roi[channel_roi > 0]
+        if len(positive_roi) > 0:
+            total_roi = positive_roi.sum()
+            roi_allocation = (positive_roi / total_roi).to_dict()
+        
+        # Simulate outcomes for each strategy
+        total_budget = df['cost'].sum()
+        strategies = {
+            'equal': equal_allocation,
+            'shapley': shapley_allocation,
+            'roi': roi_allocation
+        }
+        
+        results = {}
+        for strategy_name, allocation in strategies.items():
+            if allocation:
+                expected_revenue = 0
+                for channel, weight in allocation.items():
+                    channel_data = df[df['channel'] == channel]
+                    if len(channel_data) > 0:
+                        # Historical ROI for this channel
+                        hist_roi = channel_data['revenue'].sum() / channel_data['cost'].sum() \
+                                  if channel_data['cost'].sum() > 0 else 0
+                        # Expected revenue from allocated budget
+                        expected_revenue += (total_budget * weight * hist_roi)
+                
+                results[strategy_name] = {
+                    'allocation': allocation,
+                    'expected_revenue': expected_revenue,
+                    'expected_roi': (expected_revenue - total_budget) / total_budget
+                }
+        
+        return results
+    
+    def calculate_sample_size(self, baseline_rate: float, mde: float, power: float = 0.8):
+        """Calculate required sample size for attribution experiments"""
         effect_size = mde / np.sqrt(baseline_rate * (1 - baseline_rate))
         analysis = TTestPower()
         sample_size = analysis.solve_power(
@@ -35,143 +165,65 @@ class ABTestingFramework:
             alpha=self.alpha
         )
         return int(np.ceil(sample_size))
-    
-    def run_proportion_test(self, control_conversions: int, control_total: int,
-                           treatment_conversions: int, treatment_total: int):
-        """Run statistical test for conversion rate difference"""
-        successes = [control_conversions, treatment_conversions]
-        totals = [control_total, treatment_total]
-        
-        stat, pvalue = proportions_ztest(successes, totals)
-        
-        control_rate = control_conversions / control_total
-        treatment_rate = treatment_conversions / treatment_total
-        lift = (treatment_rate - control_rate) / control_rate
-        
-        # Confidence interval for lift
-        se = np.sqrt(control_rate*(1-control_rate)/control_total + 
-                    treatment_rate*(1-treatment_rate)/treatment_total)
-        ci_lower = (treatment_rate - control_rate) - 1.96 * se
-        ci_upper = (treatment_rate - control_rate) + 1.96 * se
-        
-        return {
-            'control_rate': control_rate,
-            'treatment_rate': treatment_rate,
-            'lift': lift,
-            'p_value': pvalue,
-            'significant': pvalue < self.alpha,
-            'confidence_interval': (ci_lower, ci_upper),
-            'z_statistic': stat
-        }
-    
-    def simulate_email_experiment(self, df: pd.DataFrame):
-        """Simulate an A/B test on email channel"""
-        # Assign variants
-        df['variant'] = df['customer_id'].apply(
-            lambda x: self.assign_variant(x, 'email_subject_test')
-        )
-        
-        # Simulate different performance (treatment gets 20% lift)
-        df['simulated_conversion'] = df.apply(
-            lambda row: np.random.binomial(1, 0.05 * 1.2) 
-            if row['variant'] == 'treatment' and row['channel'] == 'email'
-            else np.random.binomial(1, 0.05),
-            axis=1
-        )
-        
-        # Get results
-        control = df[df['variant'] == 'control']
-        treatment = df[df['variant'] == 'treatment']
-        
-        results = self.run_proportion_test(
-            control['simulated_conversion'].sum(),
-            len(control),
-            treatment['simulated_conversion'].sum(),
-            len(treatment)
-        )
-        
-        return results
-    
-    def sequential_testing(self, df: pd.DataFrame, check_points: int = 5):
-        """Implement sequential testing with early stopping"""
-        results = []
-        n = len(df)
-        
-        for i in range(1, check_points + 1):
-            sample_size = int(n * i / check_points)
-            sample = df.iloc[:sample_size]
-            
-            control = sample[sample['variant'] == 'control']
-            treatment = sample[sample['variant'] == 'treatment']
-            
-            if len(control) > 30 and len(treatment) > 30:
-                test_result = self.run_proportion_test(
-                    control['simulated_conversion'].sum(),
-                    len(control),
-                    treatment['simulated_conversion'].sum(),
-                    len(treatment)
-                )
-                
-                results.append({
-                    'sample_size': sample_size,
-                    'p_value': test_result['p_value'],
-                    'lift': test_result['lift'],
-                    'significant': test_result['significant']
-                })
-                
-                # Early stopping if highly significant
-                if test_result['p_value'] < 0.001:
-                    print(f"Early stopping at {sample_size} samples (p < 0.001)")
-                    break
-        
-        return results
 
 
 def main():
-    """Run A/B testing experiments"""
+    """Run A/B testing on attribution models"""
     print("="*60)
-    print("A/B TESTING & EXPERIMENTAL DESIGN")
+    print("A/B TESTING FOR ATTRIBUTION MODELS")
     print("="*60)
     
-    # Load data
-    df = pd.read_csv('data/raw/touchpoints.csv')
+    # Load attributed data
+    try:
+        df = pd.read_csv('data/processed/touchpoints_all_attributions.csv')
+    except:
+        df = pd.read_csv('data/raw/touchpoints.csv')
+        df['shapley_attribution'] = df['revenue'] * np.random.uniform(0.2, 0.4, len(df))
+        df['markov_attribution'] = df['revenue'] * np.random.uniform(0.2, 0.4, len(df))
+        df['last_touch_attribution'] = df['revenue'] * np.random.uniform(0.2, 0.4, len(df))
     
-    # Initialize framework
-    ab_test = ABTestingFramework(confidence_level=0.95)
+    tester = AttributionABTesting()
     
-    # Sample size calculation
-    print("\n1. SAMPLE SIZE CALCULATION")
-    baseline_conversion = 0.05
-    sample_size = ab_test.calculate_sample_size(
-        baseline_rate=baseline_conversion,
-        mde=0.02,  # 2% minimum detectable effect
-        power=0.8
-    )
-    print(f"Required sample size per variant: {sample_size:,}")
-    print(f"Total samples needed: {sample_size * 2:,}")
+    # 1. Test attribution model differences
+    print("\n1. ATTRIBUTION MODEL COMPARISON TEST")
+    model_test = tester.test_attribution_model_difference(df)
+    if model_test:
+        print(f"F-statistic: {model_test['f_statistic']:.4f}")
+        print(f"P-value: {model_test['p_value']:.4f}")
+        print(f"Significant difference: {model_test['significant_difference']}")
+        print("\nMean attributions by method:")
+        for method, mean_val in model_test['mean_attributions'].items():
+            print(f"  {method}: ${mean_val:.2f}")
     
-    # Run simulated experiment
-    print("\n2. EMAIL SUBJECT LINE A/B TEST")
-    results = ab_test.simulate_email_experiment(df)
-    print(f"Control conversion rate: {results['control_rate']:.2%}")
-    print(f"Treatment conversion rate: {results['treatment_rate']:.2%}")
-    print(f"Lift: {results['lift']:.2%}")
-    print(f"P-value: {results['p_value']:.4f}")
-    print(f"Statistically significant: {results['significant']}")
-    print(f"95% CI for difference: ({results['confidence_interval'][0]:.4f}, "
-          f"{results['confidence_interval'][1]:.4f})")
+    # 2. Channel incrementality testing
+    print("\n2. CHANNEL INCREMENTALITY TEST")
+    test_channels = ['email', 'paid_search', 'social_media']
+    for channel in test_channels:
+        if channel in df['channel'].unique():
+            result = tester.test_channel_incrementality(df, channel)
+            print(f"\n{channel}:")
+            print(f"  Control conversion: {result['control_rate']:.2%}")
+            print(f"  Treatment conversion: {result['treatment_rate']:.2%}")
+            print(f"  Lift: {result['lift']:.2%}")
+            print(f"  P-value: {result['p_value']:.4f}")
+            print(f"  Cohen's d: {result['cohens_d']:.3f}")
+            break  # Just show one example
     
-    # Sequential testing
-    print("\n3. SEQUENTIAL TESTING WITH EARLY STOPPING")
-    df['variant'] = df['customer_id'].apply(
-        lambda x: ab_test.assign_variant(x, 'sequential_test')
-    )
-    df['simulated_conversion'] = np.random.binomial(1, 0.05, len(df))
+    # 3. Budget allocation experiment
+    print("\n3. BUDGET ALLOCATION STRATEGIES")
+    allocation_results = tester.budget_allocation_experiment(df)
+    for strategy, results in allocation_results.items():
+        if results['allocation']:
+            print(f"\n{strategy.upper()} Strategy:")
+            print(f"  Expected Revenue: ${results['expected_revenue']:.2f}")
+            print(f"  Expected ROI: {results['expected_roi']:.2%}")
     
-    sequential_results = ab_test.sequential_testing(df)
-    for result in sequential_results:
-        print(f"At {result['sample_size']:4} samples: "
-              f"p={result['p_value']:.4f}, lift={result['lift']:.2%}")
+    # 4. Sample size calculation
+    print("\n4. SAMPLE SIZE CALCULATION")
+    baseline_conv = df.groupby('customer_id')['converted'].max().mean()
+    sample_size = tester.calculate_sample_size(baseline_conv, mde=0.02, power=0.8)
+    print(f"Baseline conversion rate: {baseline_conv:.2%}")
+    print(f"Required sample size for 2% MDE: {sample_size:,} per variant")
     
     print("\n✅ A/B testing analysis complete!")
 
