@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+*.egg-info/
+dist/
+build/
+.ipynb_checkpoints/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Scala/SBT
+target/
+project/target/
+project/project/
+.bsp/
+*.class
+*.log
+.scala_dependencies
+.worksheet
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# Data
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+*.csv
+*.parquet
+*.json
+!sample_data.csv
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Environment
+.env
+*.env
+
+# ML Models
+models/*.pkl
+models/*.joblib
+models/*.h5
+*.checkpoint
+
+# Logs
+logs/
+*.log
+
+# Docker
+.dockerignore
